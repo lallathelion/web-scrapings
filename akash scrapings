@@ -1,0 +1,98 @@
+import requests
+from bs4 import BeautifulSoup
+import csv
+import time
+
+# Headers to simulate a real browser visit (Avoid blocking by Amazon)
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36',
+    'Accept-Language': 'en-US, en;q=0.5'
+}
+
+# URL of the Amazon product page
+url = "https://www.amazon.in/s?rh=n%3A6612025031&fs=true&ref=lp_6612025031_sar"
+
+# CSV file to store the scraped data
+csv_file = "amazon_products.csv"
+
+def fetch_page(url):
+    """
+    Fetches the content of the page with error handling.
+    Returns the page content if the request is successful.
+    """
+    try:
+        response = requests.get(url, headers=HEADERS)
+        if response.status_code == 200:
+            return response.content
+        else:
+            print(f"Failed to fetch the page, status code: {response.status_code}")
+            return None
+    except requests.RequestException as e:
+        print(f"An error occurred while fetching the page: {e}")
+        return None
+
+def parse_product_data(content):
+    """
+    Parses product details from the page content using BeautifulSoup.
+    Returns a list of dictionaries with product details.
+    """
+    soup = BeautifulSoup(content, 'html.parser')
+    product_list = []
+
+    # Find all product containers
+    for product in soup.select('.s-result-item'):
+        product_data = {}
+
+        # Extract product name
+        name_tag = product.select_one('h2 .a-text-normal')
+        product_data['Product Name'] = name_tag.get_text(strip=True) if name_tag else "N/A"
+
+        # Extract price (may vary due to availability and offers)
+        price_tag = product.select_one('.a-price .a-offscreen')
+        product_data['Price'] = price_tag.get_text(strip=True) if price_tag else "N/A"
+
+        # Extract rating (if available)
+        rating_tag = product.select_one('.a-icon-alt')
+        product_data['Rating'] = rating_tag.get_text(strip=True) if rating_tag else "N/A"
+
+        # Extract seller name (if specified)
+        seller_tag = product.select_one('.a-row.a-size-base.a-color-secondary .a-size-base')
+        product_data['Seller Name'] = seller_tag.get_text(strip=True) if seller_tag else "N/A"
+
+        # Add only in-stock items
+        if "Currently unavailable" not in product_data['Product Name']:
+            product_list.append(product_data)
+
+    return product_list
+
+def save_to_csv(data, filename):
+    """
+    Saves product data to a CSV file.
+    """
+    keys = data[0].keys()  # Header for CSV from dictionary keys
+    with open(filename, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=keys)
+        writer.writeheader()
+        writer.writerows(data)
+    print(f"Data saved to {filename}")
+
+def main():
+    # Step 1: Fetch the page content
+    page_content = fetch_page(url)
+
+    if page_content:
+        # Step 2: Parse the content and get product details
+        products = parse_product_data(page_content)
+        
+        # Check if any products were found
+        if products:
+            # Step 3: Save the data to a CSV file
+            save_to_csv(products, csv_file)
+        else:
+            print("No products found or the data structure might have changed.")
+    else:
+        print("Failed to retrieve page content.")
+
+if __name__ == "__main__":
+    # Execute the main function
+    main()
